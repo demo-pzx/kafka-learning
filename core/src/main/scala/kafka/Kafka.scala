@@ -5,8 +5,8 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +18,11 @@
 package kafka
 
 import java.util.Properties
-
 import joptsimple.OptionParser
 import kafka.server.{KafkaServer, KafkaServerStartable}
 import kafka.utils.{CommandLineUtils, Logging}
 import org.apache.kafka.common.utils.Utils
+import org.apache.log4j.Level
 
 import scala.collection.JavaConversions._
 
@@ -40,10 +40,10 @@ object Kafka extends Logging {
 
     val props = Utils.loadProps(args(0))
 
-    if(args.length > 1) {
+    if (args.length > 1) {
       val options = optionParser.parse(args.slice(1, args.length): _*)
 
-      if(options.nonOptionArguments().size() > 0) {
+      if (options.nonOptionArguments().size() > 0) {
         CommandLineUtils.printUsageAndDie(optionParser, "Found non argument parameters: " + options.nonOptionArguments().toArray.mkString(","))
       }
 

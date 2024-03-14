@@ -24,6 +24,9 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 
+/**
+ * 示例的消息生产者
+ */
 public class Producer extends Thread {
     private final KafkaProducer<Integer, String> producer;
     private final String topic;
@@ -46,14 +49,19 @@ public class Producer extends Thread {
             String messageStr = "Message_" + messageNo;
             long startTime = System.currentTimeMillis();
             if (isAsync) { // Send asynchronously
-                producer.send(new ProducerRecord<>(topic,
-                    messageNo,
-                    messageStr), new DemoCallBack(startTime, messageNo, messageStr));
+                // 异步有回调
+                producer.send(
+                        new ProducerRecord<>(topic, messageNo, messageStr),
+                        new DemoCallBack(startTime, messageNo, messageStr)
+                );
             } else { // Send synchronously
+                // 同步不关心了
                 try {
-                    producer.send(new ProducerRecord<>(topic,
-                        messageNo,
-                        messageStr)).get();
+                    producer.send(
+                            new ProducerRecord<>(topic, messageNo, messageStr)
+                            )
+                            // 但是同步返回的feature必须get了，不然会阻塞住
+                            .get();
                     System.out.println("Sent message: (" + messageNo + ", " + messageStr + ")");
                 } catch (InterruptedException | ExecutionException e) {
                     e.printStackTrace();
@@ -85,6 +93,10 @@ class DemoCallBack implements Callback {
      *                  occurred.
      * @param exception The exception thrown during processing of this record. Null if no error occurred.
      */
+    /**
+     *
+     * 回调函数，消费者消费后会进行回调callback
+     * */
     public void onCompletion(RecordMetadata metadata, Exception exception) {
         long elapsedTime = System.currentTimeMillis() - startTime;
         if (metadata != null) {

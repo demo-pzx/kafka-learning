@@ -137,6 +137,11 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final int maxRequestSize;
     private final long totalMemorySize;
     private final Metadata metadata;
+    /**
+     * The record accumulator
+     * </br>
+     * 记录累加器
+     */
     private final RecordAccumulator accumulator;
     private final Sender sender;
     private final Metrics metrics;
@@ -432,20 +437,47 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
         // intercept the record, which can be potentially modified; this method does not throw exceptions
-        ProducerRecord<K, V> interceptedRecord = this.interceptors == null ? record : this.interceptors.onSend(record);
+        // 调用对应的拦截器方法，执行拦截处理，当拦截器null时，不执行拦截器
+        ProducerRecord<K, V> interceptedRecord
+                =
+                this.interceptors == null ? record : this.interceptors.onSend(record);
+
+        // 等价于
+        //        if (this.interceptors != null) {
+        //            interceptedRecord = this.interceptors.onSend(record);
+        //        } else {
+        //            interceptedRecord = record;
+        //        }
+
+        // 拦截器拦截处理之后的 record 交给 doSend 方法进行发送
+
         return doSend(interceptedRecord, callback);
     }
 
     /**
      * Implementation of asynchronously send a record to a topic.
+     *
+     * 实现异步向主题发送记录。
      */
     private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
-        TopicPartition tp = null;
+        TopicPartition topicPartition = null;
         try {
             // first make sure the metadata for the topic is available
+            /// 1. 首先确保主题的元数据可用 - 开始进行meta data 校验
+            // 群集和等待时间
             ClusterAndWaitTime clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
+
+            // 2. 计算剩余等待时间 - 最大等待时间 - 已经等待的时间 waitedOnMetadataMs
             long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
+
+            // 3. 获取集群元数据 (Kafka集群中节点、主题和分区的子集的表示。)
             Cluster cluster = clusterAndWaitTime.cluster;
+
+            // 4. 序列化key 和 value
+            // 序列化出问题会抛异常
+
+            // 4.1 序列化 key
+
             byte[] serializedKey;
             try {
                 serializedKey = keySerializer.serialize(record.topic(), record.key());
@@ -454,6 +486,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                         " to class " + producerConfig.getClass(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG).getName() +
                         " specified in key.serializer");
             }
+
+            // 4.2 序列化 value
             byte[] serializedValue;
             try {
                 serializedValue = valueSerializer.serialize(record.topic(), record.value());
@@ -463,15 +497,45 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                         " specified in value.serializer");
             }
 
+            // 5. 计算分区
             int partition = partition(record, serializedKey, serializedValue, cluster);
+
+            // 6. 计算序列化大小
             int serializedSize = Records.LOG_OVERHEAD + Record.recordSize(serializedKey, serializedValue);
+
+            // 7. 校验序列化大小  验证记录大小是否太大 太大的话这里会抛异常
             ensureValidRecordSize(serializedSize);
-            tp = new TopicPartition(record.topic(), partition);
+
+            // 8. 创建 TopicPartition 对象
+            topicPartition = new TopicPartition(record.topic(), partition);
+
+            // 9. 计算 timestamp
             long timestamp = record.timestamp() == null ? time.milliseconds() : record.timestamp();
             log.trace("Sending record {} with callback {} to topic {} partition {}", record, callback, record.topic(), partition);
-            // producer callback will make sure to call both 'callback' and interceptor callback
-            Callback interceptCallback = this.interceptors == null ? callback : new InterceptorCallback<>(callback, this.interceptors, tp);
-            RecordAccumulator.RecordAppendResult result = accumulator.append(tp, timestamp, serializedKey, serializedValue, interceptCallback, remainingWaitMs);
+
+            // 10. producer callback will make sure to call both 'callback' and interceptor callback
+            // 生产者回调将确保同时调用 “回调” 和拦截器回调
+            // callback 也需要被拦截器拦截处理
+            Callback interceptCallback =
+                    this.interceptors == null ? callback
+                            :
+                            new InterceptorCallback<>(callback, this.interceptors, topicPartition);
+
+
+            // 11. 将记录添加到累加器中
+            RecordAccumulator.RecordAppendResult result
+                    =
+                    accumulator
+                            .append(
+                                    topicPartition,
+                                    timestamp,
+                                    serializedKey,
+                                    serializedValue,
+                                    interceptCallback,
+                                    remainingWaitMs
+                            );
+
+            // 12. 如果批次已满或者新批次已创建，唤醒发送者
             if (result.batchIsFull || result.newBatchCreated) {
                 log.trace("Waking up the sender since topic {} partition {} is either full or getting a new batch", record.topic(), partition);
                 this.sender.wakeup();
@@ -486,28 +550,28 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 callback.onCompletion(null, e);
             this.errors.record();
             if (this.interceptors != null)
-                this.interceptors.onSendError(record, tp, e);
+                this.interceptors.onSendError(record, topicPartition, e);
             return new FutureFailure(e);
         } catch (InterruptedException e) {
             this.errors.record();
             if (this.interceptors != null)
-                this.interceptors.onSendError(record, tp, e);
+                this.interceptors.onSendError(record, topicPartition, e);
             throw new InterruptException(e);
         } catch (BufferExhaustedException e) {
             this.errors.record();
             this.metrics.sensor("buffer-exhausted-records").record();
             if (this.interceptors != null)
-                this.interceptors.onSendError(record, tp, e);
+                this.interceptors.onSendError(record, topicPartition, e);
             throw e;
         } catch (KafkaException e) {
             this.errors.record();
             if (this.interceptors != null)
-                this.interceptors.onSendError(record, tp, e);
+                this.interceptors.onSendError(record, topicPartition, e);
             throw e;
         } catch (Exception e) {
             // we notify interceptor about all exceptions, since onSend is called before anything else in this method
             if (this.interceptors != null)
-                this.interceptors.onSendError(record, tp, e);
+                this.interceptors.onSendError(record, topicPartition, e);
             throw e;
         }
     }
@@ -743,13 +807,23 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      * computes partition for given record.
      * if the record has partition returns the value otherwise
      * calls configured partitioner class to compute the partition.
+     * </p>
+     * 计算给定记录的分区。如果记录具有分区，则返回值，否则调用已配置的partitioner类来计算分区。
      */
     private int partition(ProducerRecord<K, V> record, byte[] serializedKey, byte[] serializedValue, Cluster cluster) {
-        Integer partition = record.partition();
-        return partition != null ?
-                partition :
-                partitioner.partition(
-                        record.topic(), record.key(), serializedKey, record.value(), serializedValue, cluster);
+//        Integer partition = record.partition();
+//        return partition != null ?
+//                partition :
+//                partitioner.partition(
+//                        record.topic(), record.key(), serializedKey, record.value(), serializedValue, cluster);
+
+        // 1. 如果记录具有分区，则返回值，否则调用已配置的partitioner类来计算分区。
+        if (record.partition() != null) {
+            return record.partition();
+        }
+
+        // else 2. 调用已配置的partitioner类来计算分区
+        return partitioner.partition(record.topic(), record.key(), serializedKey, record.value(), serializedValue, cluster);
     }
 
     private static class ClusterAndWaitTime {

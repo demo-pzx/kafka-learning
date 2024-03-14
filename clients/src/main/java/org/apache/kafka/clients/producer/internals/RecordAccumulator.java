@@ -144,9 +144,12 @@ public final class RecordAccumulator {
 
     /**
      * Add a record to the accumulator, return the append result
+     *
+     * <p>向累加器添加一条记录，返回追加结果</p>
      * <p>
      * The append result will contain the future metadata, and flag for whether the appended batch is full or a new batch is created
-     * <p>
+     * </p>
+     * <p>附加结果将包含未来的元数据，以及附加的批是否已满或创建新批的标志</p>
      *
      * @param tp The topic/partition to which this record is being sent
      * @param timestamp The timestamp of the record
@@ -535,7 +538,13 @@ public final class RecordAccumulator {
      */
     public final static class RecordAppendResult {
         public final FutureRecordMetadata future;
+        /**
+         * 批次是否已满
+         */
         public final boolean batchIsFull;
+        /**
+         * 是否创建了新批次
+         */
         public final boolean newBatchCreated;
 
         public RecordAppendResult(FutureRecordMetadata future, boolean batchIsFull, boolean newBatchCreated) {
