@@ -42,6 +42,8 @@ public class DefaultPartitioner implements Partitioner {
     /**
      * Compute the partition for the given record.
      *
+     * <p>计算给定记录的分区</p>
+     *
      * @param topic The topic name
      * @param key The key to partition on (or null if no key)
      * @param keyBytes serialized key to partition on (or null if no key)
@@ -50,12 +52,18 @@ public class DefaultPartitioner implements Partitioner {
      * @param cluster The current cluster metadata
      */
     public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
+
+        // 1. 获取topic的分区信息
         List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+
+        // 2. 获取分区数量
         int numPartitions = partitions.size();
+
+        // 3. 如果keyBytes为空，使用round-robin的方式选择一个分区
         if (keyBytes == null) {
             int nextValue = counter.getAndIncrement();
             List<PartitionInfo> availablePartitions = cluster.availablePartitionsForTopic(topic);
-            if (availablePartitions.size() > 0) {
+            if (!availablePartitions.isEmpty()) {
                 int part = Utils.toPositive(nextValue) % availablePartitions.size();
                 return availablePartitions.get(part).partition();
             } else {

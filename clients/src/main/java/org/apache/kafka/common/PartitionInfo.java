@@ -17,10 +17,26 @@ package org.apache.kafka.common;
  */
 public class PartitionInfo {
 
+    /**
+     * 主题名称
+     */
     private final String topic;
+    /**
+     * 分区id
+     */
     private final int partition;
+    /**
+     * 当前作为此分区的领导者的节点的节点id，如果没有领导者，则为null
+     */
     private final Node leader;
+    /**
+     * 此分区的完整副本集，无论它们是否存活或最新
+     */
     private final Node[] replicas;
+
+    /**
+     * 处于同步状态的副本的子集，即追上领导者并准备在领导者失败时接管领导者
+     */
     private final Node[] inSyncReplicas;
 
     public PartitionInfo(String topic, int partition, Node leader, Node[] replicas, Node[] inSyncReplicas) {

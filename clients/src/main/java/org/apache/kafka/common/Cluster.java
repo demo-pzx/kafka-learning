@@ -203,6 +203,7 @@ public final class Cluster {
      * @return A list of partitions
      */
     public List<PartitionInfo> partitionsForTopic(String topic) {
+        // private final Map<String, List<PartitionInfo>> partitionsByTopic
         return this.partitionsByTopic.get(topic);
     }
 

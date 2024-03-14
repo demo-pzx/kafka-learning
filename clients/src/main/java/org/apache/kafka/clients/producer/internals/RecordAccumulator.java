@@ -60,7 +60,13 @@ public final class RecordAccumulator {
     private static final Logger log = LoggerFactory.getLogger(RecordAccumulator.class);
 
     private volatile boolean closed;
+    /**
+     * 正在刷新的进程数量
+     */
     private final AtomicInteger flushesInProgress;
+    /**
+     * 正在追加的进程数量
+     */
     private final AtomicInteger appendsInProgress;
     private final int batchSize;
     private final CompressionType compression;
@@ -164,11 +170,18 @@ public final class RecordAccumulator {
                                      byte[] value,
                                      Callback callback,
                                      long maxTimeToBlock) throws InterruptedException {
+
+
         // We keep track of the number of appending thread to make sure we do not miss batches in
-        // abortIncompleteBatches().
+        // abortIncompleteBatches();
+
+        // 1. 增加正在追加的线程数
         appendsInProgress.incrementAndGet();
+
+
         try {
-            // check if we have an in-progress batch
+            // check if we have an in-progress batch 检查我们是否有正在进行的批次
+            // 2. 获取或创建一个新的deque
             Deque<RecordBatch> dq = getOrCreateDeque(tp);
             synchronized (dq) {
                 if (closed)
@@ -422,17 +435,31 @@ public final class RecordAccumulator {
 
     /**
      * Get the deque for the given topic-partition, creating it if necessary.
+     *
+     * <p>获取给定主题分区的deque，必要时创建它。</p>
      */
-    private Deque<RecordBatch> getOrCreateDeque(TopicPartition tp) {
-        Deque<RecordBatch> d = this.batches.get(tp);
-        if (d != null)
-            return d;
-        d = new ArrayDeque<>();
-        Deque<RecordBatch> previous = this.batches.putIfAbsent(tp, d);
-        if (previous == null)
-            return d;
-        else
+    private Deque<RecordBatch> getOrCreateDeque(TopicPartition topicPartition) {
+        // 1. 获取给定主题分区的deque batches is a ConcurrentHashMap
+        //  ConcurrentMap<TopicPartition, Deque<RecordBatch>> batches
+        Deque<RecordBatch> deque = this.batches.get(topicPartition);
+
+        // 2. 如果存在，直接return 否则创建一个新的deque
+        if (deque != null) {
+            return deque;
+        }
+
+        // 3. 创建一个新的deque
+        deque = new ArrayDeque<>();
+
+        // 4. 将新的deque放入batches中
+        // putIfAbsent() 方法是一个原子操作，如果key不存在，则将key-value放入map中，返回null；如果key存在，则返回已存在的value
+        Deque<RecordBatch> previous = this.batches.putIfAbsent(topicPartition, deque);
+        if (previous == null) {
+            return deque;
+        }
+        else {
             return previous;
+        }
     }
 
     /**

@@ -535,7 +535,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                                     remainingWaitMs
                             );
 
-            // 12. 如果批次已满或者新批次已创建，唤醒发送者
+            // 12. 如果批次已满或者新批次已创建，唤醒发送者 让Send开始发消息啦~~
             if (result.batchIsFull || result.newBatchCreated) {
                 log.trace("Waking up the sender since topic {} partition {} is either full or getting a new batch", record.topic(), partition);
                 this.sender.wakeup();
