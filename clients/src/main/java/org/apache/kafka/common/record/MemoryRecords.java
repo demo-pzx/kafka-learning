@@ -89,17 +89,31 @@ public class MemoryRecords implements Records {
 
     /**
      * Append a new record and offset to the buffer
+     *
+     * <p>将新记录和偏移量附加到缓冲区</p>
      * @return crc of the record
      */
     public long append(long offset, long timestamp, byte[] key, byte[] value) {
-        if (!writable)
-            throw new IllegalStateException("Memory records is not writable");
 
+        // 1. 如果不可写，那么就抛出异常
+        if (!writable) {
+            throw new IllegalStateException("Memory records is not writable");
+        }
+
+        // 2. 计算记录的大小
         int size = Record.recordSize(key, value);
+        // 3. 将记录附加到缓冲区
         compressor.putLong(offset);
+        // 4. 将记录的大小附加到缓冲区
         compressor.putInt(size);
+
+        // 5. 将记录的时间戳、键和值附加到缓冲区
         long crc = compressor.putRecord(timestamp, key, value);
+
+        // 6. 记录写入的大小
         compressor.recordWritten(size + Records.LOG_OVERHEAD);
+
+        // 7. 返回记录的crc
         return crc;
     }
 
@@ -114,14 +128,29 @@ public class MemoryRecords implements Records {
      * capacity will be the message size which is larger than the write limit, i.e. the batch size. In this case
      * the checking should be based on the capacity of the initialized buffer rather than the write limit in order
      * to accept this single record.
+     * <p>
+     *     检查我们是否有空间容纳包含给定键值对的新记录。
+     *     注意，返回值是基于写入压缩器的字节的估计值，如果真的使用压缩，这可能不准确。
+     *     当这种情况发生时，下面的附加可能会导致底层字节缓冲区流中的动态缓冲区重新分配。
+     *     在特殊情况下，当附加一条大小大于批处理大小的消息时，容量将是大于写入限制的消息大小，即批处理大小。
+     *     在这种情况下，检查应该基于初始化缓冲区的容量，而不是写入限制，以便接受这一单个记录。
+     * </p>
      */
     public boolean hasRoomFor(byte[] key, byte[] value) {
+
+        // 1. 如果已经是不可写的了，那么就返回false
         if (!this.writable)
             return false;
 
-        return this.compressor.numRecordsWritten() == 0 ?
-            this.initialCapacity >= Records.LOG_OVERHEAD + Record.recordSize(key, value) :
-            this.writeLimit >= this.compressor.estimatedBytesWritten() + Records.LOG_OVERHEAD + Record.recordSize(key, value);
+        if (this.compressor.numRecordsWritten() == 0){
+            // if we haven't written anything, we don't need to check the estimated size
+            // 如果我们还没有写任何东西，我们不需要检查估计的大小
+            return this.initialCapacity >= Records.LOG_OVERHEAD + Record.recordSize(key, value);
+        } else {
+            // we use the estimatedBytesWritten to check for the remaining space
+            // 我们使用estimatedBytesWritten来检查剩余空间
+            return this.writeLimit >= this.compressor.estimatedBytesWritten() + Records.LOG_OVERHEAD + Record.recordSize(key, value);
+        }
     }
 
     public boolean isFull() {

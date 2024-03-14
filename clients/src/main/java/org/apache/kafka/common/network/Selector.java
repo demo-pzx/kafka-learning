@@ -212,6 +212,7 @@ public class Selector implements Selectable {
      */
     @Override
     public void wakeup() {
+        // NIO Selector
         this.nioSelector.wakeup();
     }
 

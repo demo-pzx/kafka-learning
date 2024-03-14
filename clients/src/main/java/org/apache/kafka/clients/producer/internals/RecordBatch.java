@@ -15,6 +15,7 @@ package org.apache.kafka.clients.producer.internals;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.sun.istack.internal.Nullable;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -60,13 +61,19 @@ public final class RecordBatch {
 
     /**
      * Append the record to the current record set and return the relative offset within that record set
-     * 
+     *
+     * <p>将记录附加到当前记录集，并返回该记录集中的相对偏移量</p>
+     *
      * @return The RecordSend corresponding to this record or null if there isn't sufficient room.
      */
+    @Nullable
     public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Callback callback, long now) {
+        // 1. 检查是否有足够的空间
         if (!this.records.hasRoomFor(key, value)) {
+            // 没有的空间了那么就直接返回null
             return null;
         } else {
+            // 2. 如果有足够的空间，那么就将记录附加到当前记录集中
             long checksum = this.records.append(offsetCounter++, timestamp, key, value);
             this.maxRecordSize = Math.max(this.maxRecordSize, Record.recordSize(key, value));
             this.lastAppendTime = now;

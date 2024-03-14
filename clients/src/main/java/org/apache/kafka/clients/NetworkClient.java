@@ -329,6 +329,7 @@ public class NetworkClient implements KafkaClient {
      */
     @Override
     public void wakeup() {
+        // Kafka Network Selector wakeup
         this.selector.wakeup();
     }
 

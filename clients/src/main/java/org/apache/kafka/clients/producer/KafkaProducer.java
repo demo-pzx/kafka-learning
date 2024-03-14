@@ -517,7 +517,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             // 生产者回调将确保同时调用 “回调” 和拦截器回调
             // callback 也需要被拦截器拦截处理
             Callback interceptCallback =
-                    this.interceptors == null ? callback
+                    this.interceptors == null ?
+                            callback
                             :
                             new InterceptorCallback<>(callback, this.interceptors, topicPartition);
 
